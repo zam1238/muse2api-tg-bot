@@ -12,15 +12,17 @@ from urllib3.util.retry import Retry
 
 CONF_FILE = os.environ.get("MUSEBOT_CONF", "/etc/muse_tg_bot.conf")
 
-HELP_TEXT = (
-    "📖 *Muse 机器人使用说明 & 提示格式*\n\n"
-    "1️⃣ *聊天 / 写代码*：直接发文字对话（保留最近 12 条上下文），发送 `/clear` 清空记忆。\n"
-    "2️⃣ *生图格式*：可直接说“画一张…… / 生成图片…… / 手机壁纸……”，或用 `/img 主体 + 风格 + 竖屏/横屏`（支持 `9:16`、`16:9`，默认 `1:1`）。\n"
-    "3️⃣ *生视频格式*：可直接说“做个视频…… / 10秒竖屏视频……”，或用 `/vid 主体 + 动作 + X秒 + 竖屏/横屏`（时长 3~15 秒默认 5 秒，默认 `16:9`）。\n"
-    "4️⃣ *发图修图 / 图生视频*：发图片并在说明里写“改成赛博朋克”或“让画面动起来，5秒”。\n"
-    "5️⃣ *代理说明*：需要走代理时先安装 `sing-box`（已有则跳过），在终端菜单选 `10` 填入现有节点（支持 `hysteria2://`、`vless://`、`socks5h://`、`http://`）后选 `5` 重启生效；留空则直连。\n\n"
-    "💡 *终端管理*：输入 `musebot` 打开菜单，选 `9` 看完整说明，选 `11` 管理 `sing-box`，选 `10` 设代理，选 `5` 重启生效。"
-)
+
+def build_help_text(max_history):
+    return (
+        "📖 *Muse 机器人使用说明 & 提示格式*\n\n"
+        f"1️⃣ *聊天 / 写代码*：直接发文字对话（保留最近 {max_history} 条上下文），发送 `/clear` 清空记忆。\n"
+        "2️⃣ *生图格式*：可直接说“画一张…… / 生成图片…… / 手机壁纸……”，或用 `/img 主体 + 风格 + 竖屏/横屏`（支持 `9:16`、`16:9`，默认 `1:1`）。\n"
+        "3️⃣ *生视频格式*：可直接说“做个视频…… / 10秒竖屏视频……”，或用 `/vid 主体 + 动作 + X秒 + 竖屏/横屏`（时长 3~15 秒默认 5 秒，默认 `16:9`）。\n"
+        "4️⃣ *发图修图 / 图生视频*：发图片并在说明里写“改成赛博朋克”或“让画面动起来，5秒”。\n"
+        "5️⃣ *代理说明*：需要走代理时先安装 `sing-box`（已有则跳过），在终端菜单选 `10` 填入现有节点（支持 `hysteria2://`、`vless://`、`socks5h://`、`http://`）后选 `5` 重启生效；留空则直连。\n\n"
+        "💡 *终端管理*：输入 `musebot` 打开菜单，选 `9` 看完整说明，选 `11` 管理 `sing-box`，选 `10` 设代理，选 `5` 重启生效。"
+    )
 
 
 def load_conf():
@@ -30,6 +32,7 @@ def load_conf():
         "MUSE_BASE": os.environ.get("MUSE_BASE", ""),
         "MUSE_KEY": os.environ.get("MUSE_KEY", ""),
         "TG_PROXY": os.environ.get("TG_PROXY", ""),
+        "MAX_HISTORY": os.environ.get("MAX_HISTORY", "60"),
     }
     if os.path.exists(CONF_FILE):
         with open(CONF_FILE, "r", encoding="utf-8") as f:
@@ -48,6 +51,11 @@ ALLOWED_UID = CFG["ALLOWED_UID"]
 MUSE_BASE = CFG["MUSE_BASE"].rstrip("/")
 MUSE_KEY = CFG["MUSE_KEY"]
 TG_PROXY = CFG["TG_PROXY"].strip()
+try:
+    MAX_HISTORY = max(4, int(CFG.get("MAX_HISTORY", "60")))
+except ValueError:
+    MAX_HISTORY = 60
+HELP_TEXT = build_help_text(MAX_HISTORY)
 
 
 def setup_tg_proxy(raw_proxy):
@@ -318,8 +326,8 @@ def handle_chat(chat_id, text, image_data_uri=None):
         user_content = text
 
     msgs.append({"role": "user", "content": user_content})
-    if len(msgs) > 12:
-        msgs[:] = msgs[-12:]
+    if len(msgs) > MAX_HISTORY:
+        msgs[:] = msgs[-MAX_HISTORY:]
 
     tg_post("sendChatAction", {"chat_id": chat_id, "action": "typing"})
     try:
