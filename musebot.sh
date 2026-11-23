@@ -12,6 +12,7 @@ ALLOWED_UID=""
 MUSE_BASE=""
 MUSE_KEY=""
 TG_PROXY=""
+MAX_HISTORY="60"
 EOC
   source "$CONF"
 }
@@ -122,7 +123,7 @@ show_usage() {
 ==========================================
 【一、常用提示词 / 发送格式】
 1. 聊天 / 写代码
-   直接发文字即可，自动保留最近 12 条上下文；
+   直接发文字即可，自动保留最近若干条上下文；
    发 /clear 清空当前上下文记忆。
 
 2. 生图格式（支持自动路由或 /img）
@@ -183,6 +184,7 @@ while true; do
   echo " 接口地址 : ${MUSE_BASE:-未设置}"
   echo " API 密钥 : ${MUSE_KEY:-未设置}"
   echo " TG 代理  : ${TG_PROXY:-未设置（直连）}"
+  echo " 上下文数 : ${MAX_HISTORY:-60} 条"
   echo "------------------------------------------"
   echo "  1. 修改 Telegram Bot Token"
   echo "  2. 修改允许的 Telegram 用户 ID（留空则不限制）"
@@ -196,9 +198,10 @@ while true; do
   echo " 10. 设置代理"
   echo " 11. 代理内核管理（安装 / 卸载 sing-box）"
   echo " 12. 一键更新脚本（保留当前配置）"
+  echo " 13. 修改上下文记忆条数（默认 60）"
   echo "  0. 退出菜单"
   echo "=========================================="
-  read -rp "请输入选项 [0-12]: " choice
+  read -rp "请输入选项 [0-13]: " choice
 
   case "$choice" in
     1)
@@ -293,6 +296,16 @@ while true; do
         echo "拉取更新失败，请检查网络或 GitHub 访问状态。"
         sleep 2
       fi
+      ;;
+    13)
+      read -rp "请输入保留的上下文消息条数（建议 20~120，当前 ${MAX_HISTORY:-60}）: " val
+      if [[ "$val" =~ ^[0-9]+$ ]] && [ "$val" -ge 4 ]; then
+        save_kv "MAX_HISTORY" "$val"
+        echo "已更新 MAX_HISTORY 为 $val（请选 5 重启服务生效）"
+      else
+        echo "输入无效，请输入大于等于 4 的整数"
+      fi
+      sleep 1
       ;;
     0)
       exit 0
