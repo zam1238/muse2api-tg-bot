@@ -23,7 +23,7 @@ pip install -U "requests[socks]" PySocks
 
 ## 配置说明
 
-参考 `.env.example` 配置以下参数（可通过环境变量或 `/etc/muse_tg_bot.conf` 传入）[cite: 5]：
+参考 `.env.example` 配置以下参数（可通过环境变量或 `/etc/muse_tg_bot.conf` 传入）：
 
 - `TG_TOKEN`：Telegram Bot Token[cite: 5]
 - `ALLOWED_UID`：允许使用的 Telegram 用户 ID（留空则不限制）[cite: 5]
