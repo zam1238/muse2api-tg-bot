@@ -10,10 +10,27 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+# 配置文件路径（默认读取 /etc/muse_tg_bot.conf）
 CONF_FILE = os.environ.get("MUSEBOT_CONF", "/etc/muse_tg_bot.conf")
+
+# Telegram 左下角“菜单”按钮显示的快捷命令列表（带中文说明）
+TG_BOT_COMMANDS = [
+    {"command": "help", "description": "📖 查看使用说明与提示格式"},
+    {"command": "clear", "description": "🧹 清空当前对话上下文"},
+    {"command": "img", "description": "🎨 生图格式：/img 主体 + 风格 + 竖屏/横屏"},
+    {"command": "vid", "description": "🎬 生视频格式：/vid 主体 + 动作 + X秒"},
+]
+
+# 点击快捷按钮后发送的引导提示文案
+QUICK_PROMPTS = {
+    "quick_img": "请直接发送生图描述，例如：\n/img 橘猫在草地上晒太阳，水彩插画，竖屏",
+    "quick_vid": "请直接发送生视频描述，例如：\n/vid 小猫在草地上奔跑，镜头跟随，6秒竖屏",
+    "quick_edit": "请直接发送一张图片，并在图片说明里写要求，例如：\n改成赛博朋克风格 或 让画面自然动起来，5秒",
+}
 
 
 def build_help_text(max_history):
+    """生成机器人使用说明文本（动态显示当前保留的上下文条数）"""
     return (
         "📖 *Muse 机器人使用说明 & 提示格式*\n\n"
         f"1️⃣ *聊天 / 写代码*：直接发文字对话（保留最近 {max_history} 条上下文），发送 `/clear` 清空记忆。\n"
@@ -26,6 +43,7 @@ def build_help_text(max_history):
 
 
 def load_conf():
+    """读取环境变量与配置文件参数"""
     cfg = {
         "TG_TOKEN": os.environ.get("TG_TOKEN", ""),
         "ALLOWED_UID": os.environ.get("ALLOWED_UID", ""),
@@ -59,6 +77,7 @@ HELP_TEXT = build_help_text(MAX_HISTORY)
 
 
 def setup_tg_proxy(raw_proxy):
+    """配置 Telegram 代理；若为 hysteria2 / vless 节点则自动拉起本地 sing-box SOCKS5 端口"""
     if not raw_proxy:
         return None
     if raw_proxy.startswith(("http://", "https://", "socks5://", "socks5h://")):
@@ -161,10 +180,11 @@ def setup_tg_proxy(raw_proxy):
 TG_API = f"https://api.telegram.org/bot{TG_TOKEN}"
 TG_FILE_API = f"https://api.telegram.org/file/bot{TG_TOKEN}"
 HEADERS = {"Authorization": f"Bearer {MUSE_KEY}", "Content-Type": "application/json"}
-HISTORY = {}
+HISTORY = {}  # 按 chat_id 保存每个会话的对话历史记录
 
 
 def build_session(proxies=None):
+    """构建带自动重试机制的 requests Session"""
     s = requests.Session()
     retry = Retry(
         total=3,
@@ -187,10 +207,14 @@ MUSE_SESSION = build_session(None)
 
 
 def tg_request(method, data=None, files=None, params=None, timeout=180):
+    """统一调用 Telegram Bot API，支持表单/文件和 JSON 参数"""
     for attempt in range(3):
         try:
             if method in ("getUpdates", "getFile"):
                 r = TG_SESSION.get(f"{TG_API}/{method}", params=params, timeout=timeout)
+            elif isinstance(data, dict) and not files and any(isinstance(v, (dict, list)) for v in data.values()):
+                # 含嵌套字典/列表（如 reply_markup）时走 JSON 请求体
+                r = TG_SESSION.post(f"{TG_API}/{method}", json=data, timeout=timeout)
             else:
                 r = TG_SESSION.post(f"{TG_API}/{method}", data=data, files=files, timeout=timeout)
             return r.json()
@@ -202,6 +226,47 @@ def tg_request(method, data=None, files=None, params=None, timeout=180):
 
 def tg_post(method, data=None, files=None, timeout=180):
     return tg_request(method, data=data, files=files, timeout=timeout)
+
+
+def register_bot_commands():
+    """向 Telegram 注册机器人快捷菜单命令（带中文描述）"""
+    try:
+        res = tg_request("setMyCommands", data={"commands": TG_BOT_COMMANDS}, timeout=20)
+        print("Registered TG commands:", res.get("ok"))
+    except Exception as e:
+        print("Register TG commands error:", e)
+
+
+def send_quick_menu(chat_id):
+    """发送带快捷按钮的欢迎与操作菜单"""
+    keyboard = {
+        "inline_keyboard": [
+            [
+                {"text": "🎨 生图模板", "callback_data": "quick_img"},
+                {"text": "🎬 生视频模板", "callback_data": "quick_vid"},
+            ],
+            [
+                {"text": "🖼️ 修图/图生视频", "callback_data": "quick_edit"},
+                {"text": "🧹 清空上下文", "callback_data": "quick_clear"},
+            ],
+            [
+                {"text": "📖 完整使用说明", "callback_data": "quick_help"},
+            ],
+        ]
+    }
+    welcome_text = (
+        "👋 *Muse2API 机器人已就绪*\n\n"
+        "你可以直接发消息聊天/生图/生视频，也可以点下方快捷按钮，或点输入框旁边的“菜单”查看命令。"
+    )
+    res = tg_post(
+        "sendMessage",
+        {"chat_id": chat_id, "text": welcome_text, "parse_mode": "Markdown", "reply_markup": keyboard},
+    )
+    if not res.get("ok"):
+        tg_post(
+            "sendMessage",
+            {"chat_id": chat_id, "text": welcome_text.replace("*", ""), "reply_markup": keyboard},
+        )
 
 
 def root_origin():
@@ -217,6 +282,7 @@ def normalize_url(u):
 
 
 def extract_video_url(st):
+    """从异步视频任务状态响应中提取视频下载地址"""
     if not isinstance(st, dict):
         return ""
     for cand in [
@@ -238,6 +304,7 @@ def send_help(chat_id):
 
 
 def download_tg_photo(msg):
+    """下载 Telegram 消息中的最高清图片并转为 base64 data URI"""
     photos = msg.get("photo") or []
     if not photos:
         return None, None
@@ -252,6 +319,7 @@ def download_tg_photo(msg):
 
 
 def parse_media_hints(text):
+    """从文本中解析宽高比和视频时长（3~15 秒）"""
     img_size = "1:1"
     vid_size = "16:9"
     if any(k in text for k in ["竖屏", "手机壁纸", "短视频", "9:16"]):
@@ -269,6 +337,7 @@ def parse_media_hints(text):
 
 
 def detect_intent(text, has_image=False):
+    """识别用户意图：VIDEO / IMAGE / CHAT"""
     if has_image:
         if any(k in text for k in ["视频", "动起来", "动画", "拍成", "做成视频", "图生视频"]):
             return "VIDEO", text or "让这张图片自然动起来"
@@ -311,6 +380,7 @@ def detect_intent(text, has_image=False):
 
 
 def handle_chat(chat_id, text, image_data_uri=None):
+    """处理多轮对话与清空上下文（/clear）"""
     if text.strip() == "/clear":
         HISTORY[chat_id] = []
         tg_post("sendMessage", {"chat_id": chat_id, "text": "对话上下文已清空。"})
@@ -326,6 +396,7 @@ def handle_chat(chat_id, text, image_data_uri=None):
         user_content = text
 
     msgs.append({"role": "user", "content": user_content})
+    # 按配置的 MAX_HISTORY 保留最近 N 条消息
     if len(msgs) > MAX_HISTORY:
         msgs[:] = msgs[-MAX_HISTORY:]
 
@@ -346,6 +417,7 @@ def handle_chat(chat_id, text, image_data_uri=None):
 
 
 def handle_image(chat_id, prompt, size="1:1", image_data_uri=None):
+    """处理生图与图像编辑"""
     if not prompt and not image_data_uri:
         tg_post("sendMessage", {"chat_id": chat_id, "text": "请描述你想生成的图片内容。"})
         return
@@ -377,6 +449,7 @@ def handle_image(chat_id, prompt, size="1:1", image_data_uri=None):
 
 
 def _video_worker(chat_id, prompt, duration=5, size="16:9", image_data_uri=None):
+    """后台轮询视频生成任务状态，完成后下载并发送视频"""
     tg_post("sendMessage", {"chat_id": chat_id, "text": f"已提交生视频任务（{duration}秒 / {size}），预计需要 1~5 分钟，完成后自动发送..."})
     tg_post("sendChatAction", {"chat_id": chat_id, "action": "upload_video"})
     try:
@@ -432,6 +505,7 @@ def _video_worker(chat_id, prompt, duration=5, size="16:9", image_data_uri=None)
 
 
 def handle_video(chat_id, prompt, duration=5, size="16:9", image_data_uri=None):
+    """启动异步线程提交并轮询视频任务"""
     if not prompt and not image_data_uri:
         tg_post("sendMessage", {"chat_id": chat_id, "text": "请描述你想生成的视频内容。"})
         return
@@ -442,11 +516,40 @@ def handle_video(chat_id, prompt, duration=5, size="16:9", image_data_uri=None):
     ).start()
 
 
+def handle_callback_query(cq):
+    """处理内联快捷按钮点击事件"""
+    cq_id = cq.get("id")
+    data = (cq.get("data") or "").strip()
+    msg = cq.get("message") or {}
+    chat_id = msg.get("chat", {}).get("id")
+    uid = str((cq.get("from") or {}).get("id", ""))
+    if not chat_id:
+        return
+    if ALLOWED_UID and uid != str(ALLOWED_UID):
+        return
+
+    # 应答按钮点击，消除 Telegram 按钮上的加载转圈
+    if cq_id:
+        tg_request("answerCallbackQuery", data={"callback_query_id": cq_id}, timeout=15)
+
+    if data == "quick_clear":
+        handle_chat(chat_id, "/clear")
+    elif data == "quick_help":
+        send_help(chat_id)
+    elif data in QUICK_PROMPTS:
+        tg_post("sendMessage", {"chat_id": chat_id, "text": QUICK_PROMPTS[data]})
+
+
 def main():
+    """主轮询循环：接收消息与快捷按钮回调"""
     if not TG_TOKEN or not MUSE_BASE or not MUSE_KEY:
         print("错误: 请先配置 TG_TOKEN、MUSE_BASE 和 MUSE_KEY（可运行 musebot 菜单设置）。")
         while True:
             time.sleep(60)
+
+    # 启动时向 Telegram 注册快捷菜单命令
+    register_bot_commands()
+
     offset = 0
     print("Muse Telegram Bot started...")
     while True:
@@ -457,6 +560,12 @@ def main():
                 continue
             for upd in res.get("result", []):
                 offset = upd["update_id"] + 1
+
+                # 处理快捷按钮点击回调
+                if "callback_query" in upd:
+                    handle_callback_query(upd["callback_query"])
+                    continue
+
                 msg = upd.get("message") or {}
                 chat_id = msg.get("chat", {}).get("id")
                 uid = str(msg.get("from", {}).get("id", ""))
@@ -472,7 +581,10 @@ def main():
                     continue
 
                 low = text.lower()
-                if not has_image and (low in ("/help", "/start", "使用说明", "帮助", "菜单")):
+                if not has_image and low in ("/start", "/menu", "菜单"):
+                    send_quick_menu(chat_id)
+                    continue
+                if not has_image and (low in ("/help", "使用说明", "帮助")):
                     send_help(chat_id)
                     continue
 
