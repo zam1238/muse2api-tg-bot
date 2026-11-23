@@ -1,8 +1,11 @@
 import base64
+import json
 import os
 import re
+import subprocess
 import threading
 import time
+from urllib.parse import parse_qs, unquote, urlparse
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -10,13 +13,13 @@ from urllib3.util.retry import Retry
 CONF_FILE = os.environ.get("MUSEBOT_CONF", "/etc/muse_tg_bot.conf")
 
 HELP_TEXT = (
-    "📖 *Muse 机器人使用说明*\n\n"
-    "1️⃣ *直接聊天 / 写代码*：直接发送文字即可对话，支持连续上下文；发送 `/clear` 清空当前记忆。\n"
-    "2️⃣ *自然语言生图*：直接说“画一张…… / 生成图片…… / 手机壁纸……”，自动识别比例（支持竖屏/横屏/默认 1:1）。\n"
-    "3️⃣ *自然语言生视频*：直接说“做个视频…… / 拍一段…… / 10秒竖屏视频……”，后台异步提交并在完成后自动发回。\n"
-    "4️⃣ *发图修图 / 图生视频*：发送图片并附带说明（如“改成赛博朋克风格”或“让画面动起来”），自动走图像编辑或图生视频。\n"
-    "5️⃣ *强制指定命令*：可用 `/img 提示词`、`/vid 提示词`、`/clear`、`/help`。\n\n"
-    "💡 *服务器快捷管理*：在终端输入 `musebot` 可打开中文菜单修改配置、看日志或重启服务。"
+    "📖 *Muse 机器人使用说明 & 提示格式*\n\n"
+    "1️⃣ *聊天 / 写代码*：直接发文字对话（保留最近 12 条上下文），发送 `/clear` 清空记忆。\n"
+    "2️⃣ *生图格式*：可直接说“画一张…… / 生成图片…… / 手机壁纸……”，或用 `/img 主体 + 风格 + 竖屏/横屏`（支持 `9:16`、`16:9`，默认 `1:1`）。\n"
+    "3️⃣ *生视频格式*：可直接说“做个视频…… / 10秒竖屏视频……”，或用 `/vid 主体 + 动作 + X秒 + 竖屏/横屏`（时长 3~15 秒默认 5 秒，默认 `16:9`）。\n"
+    "4️⃣ *发图修图 / 图生视频*：发图片并在说明里写“改成赛博朋克”或“让画面动起来，5秒”。\n"
+    "5️⃣ *代理说明*：需要走代理时先安装 `sing-box`（已有则跳过），在终端菜单选 `10` 填入现有节点（支持 `hysteria2://`、`vless://`、`socks5h://`、`http://`）后选 `5` 重启生效；留空则直连。\n\n"
+    "💡 *终端管理*：输入 `musebot` 打开菜单，选 `9` 看完整说明，选 `11` 管理 `sing-box`，选 `10` 设代理，选 `5` 重启生效。"
 )
 
 
@@ -46,6 +49,107 @@ MUSE_BASE = CFG["MUSE_BASE"].rstrip("/")
 MUSE_KEY = CFG["MUSE_KEY"]
 TG_PROXY = CFG["TG_PROXY"].strip()
 
+
+def setup_tg_proxy(raw_proxy):
+    if not raw_proxy:
+        return None
+    if raw_proxy.startswith(("http://", "https://", "socks5://", "socks5h://")):
+        return {"http": raw_proxy, "https": raw_proxy}
+
+    local_port = 10809
+    outbound = None
+
+    if raw_proxy.startswith(("hysteria2://", "hy2://")):
+        u = urlparse(raw_proxy)
+        qs = parse_qs(u.query)
+        password = unquote(u.username or "")
+        server = u.hostname or ""
+        port = int(u.port or 443)
+        sni = (qs.get("sni") or [server])[0]
+        insecure = (qs.get("insecure") or ["0"])[0].lower() in ("1", "true", "yes")
+        pin_sha256 = (qs.get("pinSHA256") or [""])[0]
+
+        tls_cfg = {
+            "enabled": True,
+            "server_name": sni,
+            "insecure": insecure,
+        }
+        if pin_sha256 and not insecure:
+            tls_cfg["insecure"] = True
+
+        outbound = {
+            "type": "hysteria2",
+            "tag": "proxy-out",
+            "server": server,
+            "server_port": port,
+            "password": password,
+            "tls": tls_cfg,
+        }
+
+    elif raw_proxy.startswith("vless://"):
+        u = urlparse(raw_proxy)
+        qs = parse_qs(u.query)
+        uuid = unquote(u.username or "")
+        server = u.hostname or ""
+        port = int(u.port or 443)
+        flow = (qs.get("flow") or [""])[0]
+        security = (qs.get("security") or [""])[0]
+        sni = (qs.get("sni") or [server])[0]
+        fp = (qs.get("fp") or ["chrome"])[0]
+        pbk = (qs.get("pbk") or [""])[0]
+        sid = (qs.get("sid") or [""])[0]
+
+        outbound = {
+            "type": "vless",
+            "tag": "proxy-out",
+            "server": server,
+            "server_port": port,
+            "uuid": uuid,
+        }
+        if flow:
+            outbound["flow"] = flow
+        if security == "reality":
+            outbound["tls"] = {
+                "enabled": True,
+                "server_name": sni,
+                "utls": {"enabled": True, "fingerprint": fp},
+                "reality": {
+                    "enabled": True,
+                    "public_key": pbk,
+                    "short_id": sid,
+                },
+            }
+        elif security == "tls":
+            outbound["tls"] = {
+                "enabled": True,
+                "server_name": sni,
+                "utls": {"enabled": True, "fingerprint": fp},
+            }
+
+    if outbound:
+        sb_cfg = {
+            "log": {"level": "warn"},
+            "inbounds": [
+                {"type": "socks", "listen": "127.0.0.1", "listen_port": local_port}
+            ],
+            "outbounds": [outbound],
+        }
+        cfg_path = "/tmp/muse_proxy_singbox.json"
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(sb_cfg, f)
+        try:
+            subprocess.Popen(["sing-box", "run", "-c", cfg_path])
+            time.sleep(1.5)
+            local_socks = f"socks5h://127.0.0.1:{local_port}"
+            print(f"Started sing-box proxy on {local_socks}")
+            return {"http": local_socks, "https": local_socks}
+        except Exception as e:
+            print("Failed to start sing-box:", e)
+            return None
+
+    return None
+
+
 TG_API = f"https://api.telegram.org/bot{TG_TOKEN}"
 TG_FILE_API = f"https://api.telegram.org/file/bot{TG_TOKEN}"
 HEADERS = {"Authorization": f"Bearer {MUSE_KEY}", "Content-Type": "application/json"}
@@ -69,7 +173,7 @@ def build_session(proxies=None):
     return s
 
 
-TG_PROXIES = {"http": TG_PROXY, "https": TG_PROXY} if TG_PROXY else None
+TG_PROXIES = setup_tg_proxy(TG_PROXY)
 TG_SESSION = build_session(TG_PROXIES)
 MUSE_SESSION = build_session(None)
 
@@ -332,7 +436,7 @@ def handle_video(chat_id, prompt, duration=5, size="16:9", image_data_uri=None):
 
 def main():
     if not TG_TOKEN or not MUSE_BASE or not MUSE_KEY:
-        print("错误: 请先配置 TG_TOKEN、MUSE_BASE 和 MUSE_KEY。")
+        print("错误: 请先配置 TG_TOKEN、MUSE_BASE 和 MUSE_KEY（可运行 musebot 菜单设置）。")
         while True:
             time.sleep(60)
     offset = 0
