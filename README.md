@@ -15,10 +15,7 @@
 在 Linux 终端（建议 Debian/Ubuntu）中执行以下命令下载脚本并安装依赖：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/muse_tg_bot.py -o /opt/muse_tg_bot.py
-curl -fsSL https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/musebot.sh -o /usr/local/bin/musebot
-chmod +x /usr/local/bin/musebot
-pip install -U "requests[socks]" PySocks
+curl -fsSL https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/install.sh | bash
 ```
 
 ## 配置说明
