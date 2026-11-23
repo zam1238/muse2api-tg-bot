@@ -1,31 +1,24 @@
 # muse2api-tg-bot
 
-## MUSEBOT
-
-基于 Muse2API 接口的 Telegram 机器人，支持多轮对话、自然语言意图路由、生图/图像编辑、异步生视频/图生视频以及终端管理菜单[cite: 5]。
-
-## 一键安装
-
-在 Linux 机器（建议 Debian/Ubuntu）终端中执行以下命令安装主程序、依赖与 `musebot` 快捷菜单：
-
-bash
-curl -fsSL https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/muse_tg_bot.py -o /opt/muse_tg_bot.py && 
-
-curl -fsSL https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/musebot.sh -o /usr/local/bin/musebot && 
-
-chmod +x /usr/local/bin/musebot && 
-
-pip install -q -U "requests[socks]" PySocks 2>/dev/null || pip install -q -U --break-system-packages "requests[socks]" PySocks 2>/dev/null || (apt-get update -qq && apt-get install -y -qq python3-requests python3-socks)
-
-> 若仓库内已有独立安装脚本，也可直接运行对应脚本；安装完成后在终端输入 `musebot` 打开管理菜单[cite: 5]。
+基于 Muse2API 接口的 Telegram 机器人，支持多轮对话、自然语言意图路由、生图/图像编辑、异步生视频/图生视频以及终端管理菜单（`musebot`）。
 
 ## 功能特性
 
-- **对话与代码（`muse-spark`）**：保留最近 12 条上下文记忆，发送 `/clear` 清空当前上下文[cite: 5]。
-- **自动意图路由**：无需记命令，直接发送自然语言即可识别聊天、生图或生视频，也支持 `/img`、`/vid` 显式调用与比例/时长自动识别[cite: 5]。
-- **发图修图与图生视频**：发送图片并附带说明即可进行图像编辑或图生视频[cite: 5]。
-- **后台异步生视频**：视频任务在后台线程轮询，不阻塞聊天与生图[cite: 5]。
-- **终端管理菜单（`musebot`）**：提供配置修改、服务启停/重启、日志查看、依赖安装、代理设置、`sing-box` 安装/卸载与使用说明[cite: 5]。
+- **对话与代码（`muse-spark`）**：保留最近 12 条上下文记忆，发送 `/clear` 清空当前上下文。
+- **自动意图路由**：直接发送自然语言即可识别聊天、生图或生视频，也支持 `/img`、`/vid` 显式调用与比例、时长自动识别。
+- **发图修图与图生视频**：发送图片并附带说明即可进行图像编辑或图生视频。
+- **后台异步生视频**：视频任务在后台线程轮询，不阻塞聊天与生图。
+- **终端管理菜单（`musebot`）**：提供参数配置、服务启停/重启、实时日志查看、依赖安装、代理设置、`sing-box` 安装/卸载与使用说明。
+
+## 一键安装
+
+在 Linux 终端（建议 Debian/Ubuntu）中执行以下命令下载脚本并安装依赖：
+
+```bash
+curl -fsSL [https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/muse_tg_bot.py](https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/muse_tg_bot.py) -o /opt/muse_tg_bot.py
+curl -fsSL [https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/musebot.sh](https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/musebot.sh) -o /usr/local/bin/musebot
+chmod +x /usr/local/bin/musebot
+pip install -q -U "requests[socks]" PySocks 2>/dev/null || pip install -q -U --break-system-packages "requests[socks]" PySocks 2>/dev/null || (apt-get update -qq && apt-get install -y -qq python3-requests python3-socks)
 
 ## 配置说明
 
