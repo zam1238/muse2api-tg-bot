@@ -19,7 +19,7 @@ curl -fsSL [https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/muse_
 curl -fsSL [https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/musebot.sh](https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/musebot.sh) -o /usr/local/bin/musebot
 chmod +x /usr/local/bin/musebot
 pip install -q -U "requests[socks]" PySocks 2>/dev/null || pip install -q -U --break-system-packages "requests[socks]" PySocks 2>/dev/null || (apt-get update -qq && apt-get install -y -qq python3-requests python3-socks)
-
+```
 
 ## 配置说明
 
