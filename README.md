@@ -20,6 +20,7 @@ curl -fsSL [https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main/museb
 chmod +x /usr/local/bin/musebot
 pip install -q -U "requests[socks]" PySocks 2>/dev/null || pip install -q -U --break-system-packages "requests[socks]" PySocks 2>/dev/null || (apt-get update -qq && apt-get install -y -qq python3-requests python3-socks)
 
+
 ## 配置说明
 
 参考 `.env.example` 配置以下参数（可通过环境变量或 `/etc/muse_tg_bot.conf` 传入）[cite: 5]：
