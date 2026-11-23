@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 CONF="/etc/muse_tg_bot.conf"
 SERVICE="muse-tg"
+REPO_RAW="https://raw.githubusercontent.com/zam1238/muse2api-tg-bot/main"
+BOT_SCRIPT="/opt/muse_tg_bot.py"
+MENU_BIN="/usr/local/bin/musebot"
 
 ensure_conf() {
   [ -f "$CONF" ] || cat << 'EOC' > "$CONF"
@@ -123,36 +126,36 @@ show_usage() {
    发 /clear 清空当前上下文记忆。
 
 2. 生图格式（支持自动路由或 /img）
-   • 自然语言：画一张…… / 生成图片…… / 手机壁纸……
-   • 显式命令：/img 画面主体，风格细节，比例要求
-   • 比例关键词：含“竖屏/手机壁纸/短视频/9:16”走 9:16；
+- 自然语言：画一张…… / 生成图片…… / 手机壁纸……
+  - 显式命令：/img 画面主体，风格细节，比例要求
+  - 比例关键词：含“竖屏/手机壁纸/短视频/9:16”走 9:16；
                 含“横屏/电脑壁纸/宽屏/16:9”走 16:9；
                 默认 1:1。
    示例：/img 橘猫在草地上晒太阳，水彩插画，竖屏
 
 3. 生视频格式（支持自动路由或 /vid）
-   • 自然语言：做个视频…… / 拍一段…… / 10秒竖屏视频……
-   • 显式命令：/vid 画面主体 + 动作 + 镜头/时长/比例
-   • 时长与比例：支持“X秒”（限制 3~15 秒，默认 5 秒）；
+- 自然语言：做个视频…… / 拍一段…… / 10秒竖屏视频……
+  - 显式命令：/vid 画面主体 + 动作 + 镜头/时长/比例
+  - 时长与比例：支持“X秒”（限制 3~15 秒，默认 5 秒）；
                 支持“竖屏/9:16”或“横屏/16:9”（默认 16:9）。
    示例：/vid 小猫在草地上奔跑，镜头跟随，6秒竖屏
 
 4. 发图修图 / 图生视频格式
-   • 发送图片并在图片说明（Caption）里写要求：
-     - 修图/改风格：发送图片 + 说明“改成赛博朋克风格”
-     - 图生视频：发送图片 + 说明“让画面自然动起来，5秒”
+- 发送图片并在图片说明（Caption）里写要求：
+  - 修图/改风格：发送图片 + 说明“改成赛博朋克风格”
+    - 图生视频：发送图片 + 说明“让画面自然动起来，5秒”
 
 5. 查看说明
    在 TG 中发送 /help 或 “使用说明” 即可查看。
 
 【二、代理使用与卸载步骤】
-• 需要走代理时：
+- 需要走代理时：
   1. 选 11 -> 1 安装 sing-box；如果机器上已经有 sing-box，
      可直接跳过安装。
-  2. 选 10 填入现有节点（支持 hysteria2://、vless://、
+2. 选 10 填入现有节点（支持 hysteria2://、vless://、
      socks5h:// 或 http://）。
-  3. 选 5 重启服务使代理生效。
-• 不需要/想取消代理时：
+3. 选 5 重启服务使代理生效。
+- 不需要/想取消代理时：
   - 只需恢复直连：选 10 直接回车留空，再选 5 重启。
   - 彻底卸载 sing-box：选 11 -> 2，会自动停掉进程、
     删除残留配置、清空代理配置并恢复直连。
@@ -192,9 +195,10 @@ while true; do
   echo "  9. 查看使用说明与提示格式"
   echo " 10. 设置代理"
   echo " 11. 代理内核管理（安装 / 卸载 sing-box）"
+  echo " 12. 一键更新脚本（保留当前配置）"
   echo "  0. 退出菜单"
   echo "=========================================="
-  read -rp "请输入选项 [0-11]: " choice
+  read -rp "请输入选项 [0-12]: " choice
 
   case "$choice" in
     1)
@@ -266,6 +270,29 @@ while true; do
       ;;
     11)
       manage_singbox
+      ;;
+    12)
+      echo "正在拉取最新 muse_tg_bot.py 与 musebot..."
+      if curl -fsSL "$REPO_RAW/muse_tg_bot.py" -o "${BOT_SCRIPT}.tmp" && \
+         curl -fsSL "$REPO_RAW/musebot.sh" -o "${MENU_BIN}.tmp"; then
+        mv "${BOT_SCRIPT}.tmp" "$BOT_SCRIPT"
+        chmod +x "${MENU_BIN}.tmp"
+        mv "${MENU_BIN}.tmp" "$MENU_BIN"
+        ensure_conf
+        systemctl daemon-reload
+        if systemctl is-active "$SERVICE" >/dev/null 2>&1; then
+          systemctl restart "$SERVICE"
+          echo "更新完成并已重启 $SERVICE 服务（配置已保留）！"
+        else
+          echo "更新完成（配置已保留），如需启动可按 5 或 6。"
+        fi
+        sleep 1
+        exit 0
+      else
+        rm -f "${BOT_SCRIPT}.tmp" "${MENU_BIN}.tmp"
+        echo "拉取更新失败，请检查网络或 GitHub 访问状态。"
+        sleep 2
+      fi
       ;;
     0)
       exit 0
