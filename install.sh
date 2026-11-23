@@ -18,7 +18,7 @@ pip install -q -U "requests[socks]" PySocks 2>/dev/null || \
 pip install -q -U --break-system-packages "requests[socks]" PySocks 2>/dev/null || \
 (apt-get update -qq && apt-get install -y -qq python3-requests python3-socks)
 
-echo "3/4 初始化配置文件..."
+echo "3/4 检查配置文件..."
 if [ ! -f "$CONF_FILE" ]; then
   cat << 'EOF' > "$CONF_FILE"
 TG_TOKEN=""
@@ -50,4 +50,9 @@ EOF
 systemctl daemon-reload
 systemctl enable muse-tg.service >/dev/null 2>&1 || true
 
-echo "安装完成！现在输入 musebot 即可打开管理菜单。"
+if grep -q 'TG_TOKEN="[^"]' "$CONF_FILE" 2>/dev/null; then
+  systemctl restart muse-tg.service
+  echo "更新完成并已自动重启机器人服务！"
+else
+  echo "安装完成！现在输入 musebot 即可打开管理菜单。"
+fi
