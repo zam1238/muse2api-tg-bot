@@ -1,6 +1,6 @@
 # muse2api-tg-bot
 
-本项目基于 [muse2api](https://github.com/czg86389-hub/muse2api) 接口实现，配合终端管理菜单 `musebot` 可快速完成配置、代理设置、上下文条数调整与一键更新。
+本项目基于上游接口项目实现：https://github.com/czg86389-hub/muse2api
 
 基于 Muse2API 接口的 Telegram 机器人，支持多轮对话、自然语言意图路由、生图/图像编辑、异步生视频/图生视频以及终端管理菜单（`musebot`）。
 
