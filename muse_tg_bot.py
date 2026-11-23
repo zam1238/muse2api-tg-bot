@@ -13,12 +13,13 @@ from urllib3.util.retry import Retry
 # 配置文件路径（默认读取 /etc/muse_tg_bot.conf）
 CONF_FILE = os.environ.get("MUSEBOT_CONF", "/etc/muse_tg_bot.conf")
 
-# Telegram 左下角“菜单”按钮显示的快捷命令列表（带中文说明）
+# 输入 "/" 时弹出的快捷命令列表（带中文说明）
 TG_BOT_COMMANDS = [
-    {"command": "help", "description": "📖 查看使用说明与提示格式"},
-    {"command": "clear", "description": "🧹 清空当前对话上下文"},
-    {"command": "img", "description": "🎨 生图格式：/img 主体 + 风格 + 竖屏/横屏"},
-    {"command": "vid", "description": "🎬 生视频格式：/vid 主体 + 动作 + X秒"},
+    {"command": "menu", "description": "打开快捷功能按钮菜单"},
+    {"command": "help", "description": "查看使用说明与提示格式"},
+    {"command": "clear", "description": "清空当前对话上下文记忆"},
+    {"command": "img", "description": "生成图片（如 /img 橘猫晒太阳，竖屏）"},
+    {"command": "vid", "description": "生成视频（如 /vid 小猫奔跑，6秒竖屏）"},
 ]
 
 # 点击快捷按钮后发送的引导提示文案
@@ -213,7 +214,6 @@ def tg_request(method, data=None, files=None, params=None, timeout=180):
             if method in ("getUpdates", "getFile"):
                 r = TG_SESSION.get(f"{TG_API}/{method}", params=params, timeout=timeout)
             elif isinstance(data, dict) and not files and any(isinstance(v, (dict, list)) for v in data.values()):
-                # 含嵌套字典/列表（如 reply_markup）时走 JSON 请求体
                 r = TG_SESSION.post(f"{TG_API}/{method}", json=data, timeout=timeout)
             else:
                 r = TG_SESSION.post(f"{TG_API}/{method}", data=data, files=files, timeout=timeout)
@@ -229,7 +229,7 @@ def tg_post(method, data=None, files=None, timeout=180):
 
 
 def register_bot_commands():
-    """向 Telegram 注册机器人快捷菜单命令（带中文描述）"""
+    """向 Telegram 注册输入 '/' 时弹出的命令列表（带中文说明）"""
     try:
         res = tg_request("setMyCommands", data={"commands": TG_BOT_COMMANDS}, timeout=20)
         print("Registered TG commands:", res.get("ok"))
@@ -256,7 +256,7 @@ def send_quick_menu(chat_id):
     }
     welcome_text = (
         "👋 *Muse2API 机器人已就绪*\n\n"
-        "你可以直接发消息聊天/生图/生视频，也可以点下方快捷按钮，或点输入框旁边的“菜单”查看命令。"
+        "你可以直接发消息聊天/生图/生视频，也可以点下方快捷按钮，或在输入框输入 `/` 查看命令。"
     )
     res = tg_post(
         "sendMessage",
@@ -528,7 +528,6 @@ def handle_callback_query(cq):
     if ALLOWED_UID and uid != str(ALLOWED_UID):
         return
 
-    # 应答按钮点击，消除 Telegram 按钮上的加载转圈
     if cq_id:
         tg_request("answerCallbackQuery", data={"callback_query_id": cq_id}, timeout=15)
 
@@ -547,7 +546,7 @@ def main():
         while True:
             time.sleep(60)
 
-    # 启动时向 Telegram 注册快捷菜单命令
+    # 启动时向 Telegram 注册输入 "/" 时弹出的中文命令列表
     register_bot_commands()
 
     offset = 0
@@ -561,7 +560,6 @@ def main():
             for upd in res.get("result", []):
                 offset = upd["update_id"] + 1
 
-                # 处理快捷按钮点击回调
                 if "callback_query" in upd:
                     handle_callback_query(upd["callback_query"])
                     continue
